@@ -1,4 +1,4 @@
-from socket import SO_OOBINLINE, socket, AF_INET, SOCK_STREAM
+from socket import socket, AF_INET, SOCK_STREAM
 from struct import pack, unpack
 
 PORT = 0x4BAE

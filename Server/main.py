@@ -1,7 +1,7 @@
 from struct import pack, unpack
-import struct
 from threading import Thread
 from socket import socket, AF_INET, SOCK_STREAM
+import json
 
 PORT = 0x4BAE
 games = []
@@ -10,31 +10,89 @@ class PlayerLeftException(Exception):
     pass
 
 class Player():
+#---------------------------------------------------------------
+    def __sendJsonrpc(self, method: str = None, params: list|dict = None, error: list|dict = None):
+        jsonRPC = [{"jsonrpc":"2.0"}]
+        if method is not None:
+            jsonRPC.append({"method":method})
+        if params is not None:
+            jsonRPC.append({"params":params})
+        else:
+            jsonRPC.append({"params":[]})
+        if error is not None:
+            jsonRPC.append({"error":error})
+        messageEncoded = json.loads(jsonRPC).encode(encoding="utf-8")
+        self._sock.send(pack("!i",len(messageEncoded)))
+        self._sock.send(messageEncoded)
+
+    def __sendAndReceiveJsonrpc(self,id: int, method: str = None, params: list|dict = None, error: list|dict = None):
+        jsonRPC = [{"jsonrpc":"2.0"}]
+        jsonRPC.append({"id":id})
+        if method is not None:
+            jsonRPC.append({"method":method})
+        if params is not None:
+            jsonRPC.append({"params":params})
+        else:
+            jsonRPC.append({"params":[]})
+        if error is not None:
+            jsonRPC.append({"error":params})
+        # encode
+        messageEncoded = json.loads(jsonRPC).encode(encoding="utf-8")
+        # send
+        self._sock.send(pack("!i",len(messageEncoded)))
+        self._sock.send(messageEncoded)
+        # prepare receive
+        binaryLen = self._sock.recv(4)
+        len = unpack("!i",binaryLen)[0]
+        # receive
+        data = self._sock.recv(len).decode('utf-8')
+        #return response
+        return data
+
+    def __receiveJsonrpc(self) -> list:
+        # prepare receive
+        binaryLen = self._sock.recv(4)
+        len = unpack("!i",binaryLen)[0]
+        # receive
+        data: str = self._sock.recv(len).decode('utf-8')
+        jsonrpc = json.loads(data)
+        #return response
+        return jsonrpc
+#---------------------------------------------------------------
+
     def __init__(self,num: int,sock: socket):
         self._num = num
         self._sock = sock
-        self._sock.send(pack("!i",num))
-
-    def show(self,string_to_display: str):
-        self._sock.send(pack("!i",1))
-        encoded_string = string_to_display.encode(encoding="utf-8")
-        self._sock.send(pack("!i",len(encoded_string)))
-        self._sock.send(encoded_string)
+        #self._sock.send(pack("!i",num))
+        self.__sendJsonrpc(method="player_number",params={"player_number":num})
 
     def get_choice(self):
-        self._sock.send(pack("!i",2))
-        data = self._sock.recv(4)
+        self.__sendJsonrpc(method="play")
+        jsonObj = self.__receiveJsonrpc()
         try:
-            choice = unpack("!i",data)[0]
-        except struct.error:
-            raise PlayerLeftException
-        return choice
+            method = jsonObj["method"]
+            caseStr = jsonObj["params"]["case"]
+            id = jsonObj["id"]
+        except Exception:
+            raise Exception # malformed request
+        if method != "process_move":
+            raise Exception # wrong method
+        try:
+            case = int(caseStr)
+        except ValueError:
+            raise Exception # invalid value type (not an int)
+        return case,id
 
     def get_num(self):
         return self._num
 
-    def end_game(self):
-        self._sock.send(pack("!i",3))
+    def end_game(self, code):
+        if code==1:
+            self.__sendJsonrpc(method="end_game",params=[{"winner":True,"player":1}])
+        elif code==1:
+            self.__sendJsonrpc(method="end_game",params=[{"winner":True,"player":2}])
+        elif code==1:
+            self.__sendJsonrpc(method="end_game",params=[{"winner":False,"player":None}])
 
 class Game(Thread):
     def __init__(self,player1: Player, player2: Player):
@@ -116,6 +174,7 @@ class Game(Thread):
 
     def run(self):
         try:
+            last_player = None
             # while the game hasn't ended
             while self._status == 0:
                 # get the playing player's instance
@@ -124,11 +183,14 @@ class Game(Thread):
                     current_player = self._player1
                 elif self._turn == 2:
                     current_player = self._player2
-                current_player.show(self.__drawGrid())
+
+                if current_player != last_player:
+                    current_player.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
+
                 # get the player choice (the case)
-                choice = current_player.get_choice()
+                choice,id = current_player.get_choice()
                 if(not(-1<choice<9)):
-                    current_player.show("Erreur, réessayez")
+                    current_player.__sendJsonrpc(error=[{"code":1},{"message":"Value out of bounds"}])
                     continue
                 # process this move
                 x=choice%3
@@ -143,42 +205,36 @@ class Game(Thread):
                         # other player plays next
                         self.__switch_player()
                         # show updated grid
-                        current_player.show(self.__drawGrid())
+                        current_player.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
                         # and a message
-                        current_player.show("Au tour de l'autre joueur")
+                        current_player.__sendJsonrpc(method="next_player")
                 # if not valid then:
                 else:
                     # show error message
-                    current_player.show("Erreur, réessayez")
+                    current_player.__sendJsonrpc(error=[{"code":2},{"message":"Position already taken"}])
                     # player will play again the playing player wasn't modified
-            # end of the game
-            self._player1.show("Fin de la partie")
-            self._player2.show("Fin de la partie")
+
             # final grid state
-            self._player1.show(self.__drawGrid())
-            self._player2.show(self.__drawGrid())
+            self._player1.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
+            self._player2.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
             if self._status == 1:
-                self._player1.show("Victoire du joueur 1")
-                self._player2.show("Victoire du joueur 1")
+                self._player1.end_game(1)
+                self._player2.end_game(1)
             elif self._status == 2:
-                self._player1.show("Victoire du joueur 2")
-                self._player2.show("Victoire du joueur 2")
+                self._player1.end_game(2)
+                self._player2.end_game(2)
             elif self._status == 3:
-                self._player1.show("Egalité, pas vainqueur (ni de perdant)")
-                self._player2.show("Egalité, pas vainqueur (ni de perdant)")
-            self._player1.end_game()
-            self._player2.end_game()
+                self._player1.end_game(3)
+                self._player2.end_game(3)
         # if a plyer left mid-game
         except PlayerLeftException:
             # using try because the one who left will raise errors (and I did not bother to search who is still there)
             try:
-                self._player1.show("A player has left")
-                self._player1.end_game()
+                self._player1.__sendJsonrpc(method="player_left")
             except ConnectionError:
                 pass
             try:
-                self._player2.show("A player has left")
-                self._player2.end_game()
+                self._player1.__sendJsonrpc(method="player_left")
             except ConnectionError:
                 pass
         # flag for deletion
@@ -196,7 +252,7 @@ if __name__ == '__main__':
             sock_service, client_addr = sock_listen.accept()
 
             player = Player(len(tmp_players)+1,sock_service)
-            player.show("En attente d'un autre joueur...")
+            player.__sendJsonrpc(method="wait")
             tmp_players.append(player)
             if len(tmp_players) == 2:
                 game = Game(tmp_players[0],tmp_players[1])

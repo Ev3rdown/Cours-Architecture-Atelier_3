@@ -1,48 +1,68 @@
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "method":"player_number",
-    "params":["player_number":number]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"player_number"},
+    {"params":[{"player_number":number}]}
+]
 
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "method":"wait",
-    "params":[]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"wait"},
+    {"params":[]}
+]
 
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "method":"update_grid",
-    "params":["grid":[[],[],[]]]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"next_player"},
+    {"params":[]}
+]
 
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "method":"play",
-    "params":[]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"update_grid"},
+    {"params":[{"grid":[[],[],[]]},{"show":true}]}
+]
 
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "id":id,
-    "method":"process_move",
-    "params":["case":case]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"play"},
+    {"params":[]}
+]
+
+------------------------------->
+[
+    {"jsonrpc":"2.0"},
+    {"id":id},
+    {"method":"process_move"},
+    {"params":[{"case":case}]}
+]
 <-------------------------------
-{
-    "jsonrpc":"2.0",
-    "id":id,
-    "result":["is_valid":bool,"retry":true]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"id":id},
+    {"result":[{"is_valid":bool},{"retry":true}]}
+]
+<-------------------------------
+[
+    {"jsonrpc":"2.0"},
+    {"id":id},
+    {"error":[{"code":int},{"message":string}]}
+]
 
 ------------------------------->
-{
-    "jsonrpc":"2.0",
-    "method":"end_game",
-    "params":["winner":bool,"player":int/null]
-}
+[
+    {"jsonrpc":"2.0"},
+    {"method":"end_game"},
+    {"params":[{"winner":bool},{"player":int/null}]}
+]
+
+------------------------------->
+[
+    {"jsonrpc":"2.0"},
+    {"method":"player_left"},
+    {"params":[]}
+]
