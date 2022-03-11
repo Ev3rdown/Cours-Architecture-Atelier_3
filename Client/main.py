@@ -1,3 +1,4 @@
+import json
 from socket import socket, AF_INET, SOCK_STREAM
 from struct import pack, unpack
 
@@ -12,14 +13,18 @@ if __name__ == '__main__':
         try:
             while True:
                 data = sock.recv(4)
-                type = unpack("!i",data)[0]
-                # type 1 = show text to user
-                if type == 1:
-                    lenght = unpack("!i",sock.recv(4))[0]
-                    text = sock.recv(lenght).decode('utf-8')
-                    print(text)
-                # type 2 = get case from user
-                elif type == 2:
+                lenght = unpack("!i",data)[0]
+                message = sock.recv(lenght).decode('utf-8')
+                jsonRPC = json.loads(message)
+                method = jsonRPC['method']
+                if message == "wait":
+                    print("en attente")
+                elif message == "next_player":
+                    print(display_grid())
+                    print("au tour de l'autre joueur")
+                elif message == "update_grid":
+                    update_grid(jsonRPC['params']['grid'])
+                elif message == "can_play":
                     case = 10
                     while case > 8 or case < 0:
                         try:
@@ -27,9 +32,10 @@ if __name__ == '__main__':
                         except ValueError:
                             print("Ceci n'est pas une valeur correcte, réessayez")
                             case = 10
-                    sock.send(pack("!i",case))
-                # type 3 = game as ended
-                elif type == 3:
+                    send_case(case)
+                elif message == "end_game":
+                    params = jsonRPC['params']
+                    if jsonRPC['params']['']
                     break
         except KeyboardInterrupt:
             print("\n")

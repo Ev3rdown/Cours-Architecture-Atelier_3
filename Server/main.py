@@ -9,9 +9,11 @@ games = []
 class PlayerLeftException(Exception):
     pass
 
-class Player():
-#---------------------------------------------------------------
-    def __sendJsonrpc(self, method: str = None, params: list|dict = None, error: list|dict = None):
+class JsonRPC():
+    def __init__(self,socket) -> None:
+        self.__socket = socket
+
+    def send(self, method: str = None, params: list|dict = None, error: list|dict = None):
         jsonRPC = [{"jsonrpc":"2.0"}]
         if method is not None:
             jsonRPC.append({"method":method})
@@ -22,53 +24,34 @@ class Player():
         if error is not None:
             jsonRPC.append({"error":error})
         messageEncoded = json.loads(jsonRPC).encode(encoding="utf-8")
-        self._sock.send(pack("!i",len(messageEncoded)))
-        self._sock.send(messageEncoded)
+        self._socket.send(pack("!i",len(messageEncoded)))
+        self._socket.send(messageEncoded)
 
-    def __sendAndReceiveJsonrpc(self,id: int, method: str = None, params: list|dict = None, error: list|dict = None):
-        jsonRPC = [{"jsonrpc":"2.0"}]
-        jsonRPC.append({"id":id})
-        if method is not None:
-            jsonRPC.append({"method":method})
-        if params is not None:
-            jsonRPC.append({"params":params})
-        else:
-            jsonRPC.append({"params":[]})
-        if error is not None:
-            jsonRPC.append({"error":params})
-        # encode
-        messageEncoded = json.loads(jsonRPC).encode(encoding="utf-8")
-        # send
-        self._sock.send(pack("!i",len(messageEncoded)))
-        self._sock.send(messageEncoded)
+    def receive(self) -> list:
         # prepare receive
-        binaryLen = self._sock.recv(4)
+        binaryLen = self._socket.recv(4)
         len = unpack("!i",binaryLen)[0]
         # receive
-        data = self._sock.recv(len).decode('utf-8')
-        #return response
-        return data
-
-    def __receiveJsonrpc(self) -> list:
-        # prepare receive
-        binaryLen = self._sock.recv(4)
-        len = unpack("!i",binaryLen)[0]
-        # receive
-        data: str = self._sock.recv(len).decode('utf-8')
+        data: str = self._socket.recv(len).decode('utf-8')
         jsonrpc = json.loads(data)
         #return response
         return jsonrpc
+
+
+class Player():
+#---------------------------------------------------------------
 #---------------------------------------------------------------
 
     def __init__(self,num: int,sock: socket):
         self._num = num
-        self._sock = sock
+        self.jsonRPC = JsonRPC(sock)
+
         #self._sock.send(pack("!i",num))
-        self.__sendJsonrpc(method="player_number",params={"player_number":num})
+        self.send(method="player_number",params={"player_number":num})
 
     def get_choice(self):
-        self.__sendJsonrpc(method="play")
-        jsonObj = self.__receiveJsonrpc()
+        self.jsonRPC.send(method="play")
+        jsonObj = self.jsonRPC.receive()
         try:
             method = jsonObj["method"]
             caseStr = jsonObj["params"]["case"]
@@ -88,11 +71,11 @@ class Player():
 
     def end_game(self, code):
         if code==1:
-            self.__sendJsonrpc(method="end_game",params=[{"winner":True,"player":1}])
+            self.jsonRPC.send(method="end_game",params=[{"winner":True,"player":1}])
         elif code==1:
-            self.__sendJsonrpc(method="end_game",params=[{"winner":True,"player":2}])
+            self.jsonRPC.send(method="end_game",params=[{"winner":True,"player":2}])
         elif code==1:
-            self.__sendJsonrpc(method="end_game",params=[{"winner":False,"player":None}])
+            self.jsonRPC.send(method="end_game",params=[{"winner":False,"player":None}])
 
 class Game(Thread):
     def __init__(self,player1: Player, player2: Player):
@@ -165,12 +148,12 @@ class Game(Thread):
     # "|  |   |  |"
     # "|  |   |  |"
     # "-----------"
-    def __drawGrid(self):
-        grille = "-------"+"\n"
-        for i in range(0,3):
-            grille += "|"+self.__convert_case(self._grille[i][0])+"|"+self.__convert_case(self._grille[i][1])+"|"+self.__convert_case(self._grille[i][2])+"|\n"
-            grille += "-------\n"
-        return grille
+    # def __drawGrid(self):
+    #     grille = "-------"+"\n"
+    #     for i in range(0,3):
+    #         grille += "|"+self.__convert_case(self._grille[i][0])+"|"+self.__convert_case(self._grille[i][1])+"|"+self.__convert_case(self._grille[i][2])+"|\n"
+    #         grille += "-------\n"
+    #     return grille
 
     def run(self):
         try:
@@ -185,12 +168,12 @@ class Game(Thread):
                     current_player = self._player2
 
                 if current_player != last_player:
-                    current_player.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
+                    current_player.jsonRPC.send(method="update_grid",params=[{"grid":self._grille}])
 
                 # get the player choice (the case)
                 choice,id = current_player.get_choice()
                 if(not(-1<choice<9)):
-                    current_player.__sendJsonrpc(error=[{"code":1},{"message":"Value out of bounds"}])
+                    current_player.jsonRPC.send(error=[{"code":1},{"message":"Value out of bounds"}])
                     continue
                 # process this move
                 x=choice%3
@@ -205,18 +188,18 @@ class Game(Thread):
                         # other player plays next
                         self.__switch_player()
                         # show updated grid
-                        current_player.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
+                        current_player.jsonRPC.send(method="update_grid",params=[{"grid":self._grille}])
                         # and a message
-                        current_player.__sendJsonrpc(method="next_player")
+                        current_player.jsonRPC.send(method="next_player")
                 # if not valid then:
                 else:
                     # show error message
-                    current_player.__sendJsonrpc(error=[{"code":2},{"message":"Position already taken"}])
+                    current_player.jsonRPC.send(error=[{"code":2},{"message":"Position already taken"}])
                     # player will play again the playing player wasn't modified
 
             # final grid state
-            self._player1.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
-            self._player2.__sendJsonrpc(method="update_grid",params=[{"grid":self._grille}])
+            self._player1.jsonRPC.send(method="update_grid",params=[{"grid":self._grille}])
+            self._player2.jsonRPC.send(method="update_grid",params=[{"grid":self._grille}])
             if self._status == 1:
                 self._player1.end_game(1)
                 self._player2.end_game(1)
@@ -230,11 +213,11 @@ class Game(Thread):
         except PlayerLeftException:
             # using try because the one who left will raise errors (and I did not bother to search who is still there)
             try:
-                self._player1.__sendJsonrpc(method="player_left")
+                self._player1.jsonRPC.send(method="player_left")
             except ConnectionError:
                 pass
             try:
-                self._player1.__sendJsonrpc(method="player_left")
+                self._player1.jsonRPC.send(method="player_left")
             except ConnectionError:
                 pass
         # flag for deletion
@@ -252,7 +235,7 @@ if __name__ == '__main__':
             sock_service, client_addr = sock_listen.accept()
 
             player = Player(len(tmp_players)+1,sock_service)
-            player.__sendJsonrpc(method="wait")
+            player.jsonRPC.send(method="wait")
             tmp_players.append(player)
             if len(tmp_players) == 2:
                 game = Game(tmp_players[0],tmp_players[1])
