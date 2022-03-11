@@ -13,8 +13,10 @@ class JsonRPC():
     def __init__(self,socket) -> None:
         self.__socket = socket
 
-    def send(self, method: str = None, params: list|dict = None, error: list|dict = None):
+    def send(self,id: int = None, method: str = None, params: list|dict = None, error: list|dict = None):
         jsonRPC = [{"jsonrpc":"2.0"}]
+        if id is not None:
+            jsonRPC.append({"method":method})
         if method is not None:
             jsonRPC.append({"method":method})
         if params is not None:
@@ -57,12 +59,14 @@ class Player():
             caseStr = jsonObj["params"]["case"]
             id = jsonObj["id"]
         except Exception:
+
             raise Exception # malformed request
         if method != "process_move":
             raise Exception # wrong method
         try:
             case = int(caseStr)
         except ValueError:
+
             raise Exception # invalid value type (not an int)
         return case,id
 
