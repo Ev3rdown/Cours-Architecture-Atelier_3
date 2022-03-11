@@ -10,7 +10,7 @@ class PlayerLeftException(Exception):
     pass
 
 class JsonRPC():
-    def __init__(self,socket) -> None:
+    def __init__(self,socket : socket) -> None:
         self.__socket = socket
 
     def send(self,id: int = None, method: str = None, params: list|dict = None, error: list|dict = None):
@@ -26,15 +26,15 @@ class JsonRPC():
         if error is not None:
             jsonRPC.append({"error":error})
         messageEncoded = json.loads(jsonRPC).encode(encoding="utf-8")
-        self._socket.send(pack("!i",len(messageEncoded)))
-        self._socket.send(messageEncoded)
+        self.__socket.send(pack("!i",len(messageEncoded)))
+        self.__socket.send(messageEncoded)
 
     def receive(self) -> list:
         # prepare receive
-        binaryLen = self._socket.recv(4)
+        binaryLen = self.__socket.recv(4)
         len = unpack("!i",binaryLen)[0]
         # receive
-        data: str = self._socket.recv(len).decode('utf-8')
+        data: str = self.__socket.recv(len).decode('utf-8')
         jsonrpc = json.loads(data)
         #return response
         return jsonrpc
@@ -136,14 +136,6 @@ class Game(Thread):
             self._turn=2
         else:
             self._turn=1
-
-    def __convert_case(self,val):
-        if val==1:
-            return "X"
-        elif val==2:
-            return "O"
-        else:
-            return str(val)
 
 
     # create a render of the grid
